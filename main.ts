@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-all
 
-/// <reference types="npm:@types/node" />
+/// <reference types="npm:@types/node@^22.12.0" />
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

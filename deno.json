@@ -1,6 +1,6 @@
 {
   "name": "@cong/mcp-deno",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for executing TypeScript and JavaScript code through Deno",
   "author": "Cong",
   "license": "MIT",

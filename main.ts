@@ -11,7 +11,7 @@ import {
 
 const server = new Server({
   name: "mcp-deno",
-  version: "0.1.0",
+  version: "0.1.1",
 }, {
   capabilities: {
     tools: {},
@@ -45,49 +45,65 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       code: string;
     };
 
-    try {      
-      const command = new Deno.Command("deno", {
-        args: ["eval", code],
-        stdout: "piped",
-        stderr: "piped",
-      });
+    try {
+      // Create a temporary directory for script isolation
+      const tempDir = await Deno.makeTempDir({ prefix: "deno-mcp-" });
+      const scriptPath = `${tempDir}/script.ts`;
+      
+      try {
+        // Write the code to a temporary file
+        await Deno.writeTextFile(scriptPath, code, { mode: 0o600 });
 
-      const { code: exitCode, stdout, stderr } = await command.output();
-      const stdoutText = new TextDecoder().decode(stdout);
-      const stderrText = new TextDecoder().decode(stderr);
+        // Execute the script using the current Deno executable
+        const command = new Deno.Command(Deno.execPath(), {
+          args: ["run", "--no-check", scriptPath],
+          stdout: "piped",
+          stderr: "piped",
+          cwd: tempDir,
+        });
 
-      if (exitCode === 0) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: stdoutText || "Code executed successfully (no output)",
-            },
-          ],
-        };
-      } else {
-        // Check if it's a permission error and provide helpful feedback
-        if (stderrText.includes("PermissionDenied") || stderrText.includes("permission denied")) {
+        const { code: exitCode, stdout, stderr } = await command.output();
+        const stdoutText = new TextDecoder().decode(stdout);
+        const stderrText = new TextDecoder().decode(stderr);
+
+        if (exitCode === 0) {
           return {
             content: [
               {
                 type: "text",
-                text: `Permission denied error:\n${stderrText}\n\nTo grant permissions, restart the MCP server with appropriate flags like --allow-net, --allow-read, or --allow-write`,
+                text: stdoutText || "Code executed successfully (no output)",
+              },
+            ],
+          };
+        } else {
+          // Check if it's a permission error and provide helpful feedback
+          if (stderrText.includes("PermissionDenied") || stderrText.includes("permission denied")) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Permission denied error:\n${stderrText}\n\nTo grant permissions, restart the MCP server with appropriate flags like --allow-net, --allow-read, or --allow-write`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          
+          return {
+            content: [
+              {
+                type: "text", 
+                text: `Error (exit code ${exitCode}):\n${stderrText}`,
               },
             ],
             isError: true,
           };
         }
-        
-        return {
-          content: [
-            {
-              type: "text", 
-              text: `Error (exit code ${exitCode}):\n${stderrText}`,
-            },
-          ],
-          isError: true,
-        };
+      } finally {
+        // Clean up the temporary directory
+        await Deno.remove(tempDir, { recursive: true }).catch(() => {
+          // Ignore cleanup errors
+        });
       }
     } catch (error) {
       return {

@@ -21,7 +21,7 @@ This is an MCP (Model Context Protocol) server built with Deno that allows AI as
 ## MCP Server Architecture
 
 The server provides a single tool `execute_typescript` that:
-- Executes TypeScript/JavaScript code using `deno eval`
+- Executes TypeScript/JavaScript code by writing to temporary files
 - Takes only a `code` parameter (string)
 - Runs code in isolated subprocess for security
 - Returns stdout/stderr and exit codes

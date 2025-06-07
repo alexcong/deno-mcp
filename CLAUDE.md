@@ -37,21 +37,16 @@ Similar to `mcp-deno-sandbox`, this server prioritizes security through:
 
 ## Integration Examples
 
-For Claude Desktop configuration:
+For Claude Desktop configuration. The server requires a set of base permissions to operate (manage temporary files, execute scripts). Additional permissions can be added for the scripts themselves.
 
-### Basic (no permissions):
-```json
-{
-  "mcpServers": {
-    "deno-executor": {
-      "command": "deno",
-      "args": ["run", "jsr:@cong/mcp-deno"]
-    }
-  }
-}
-```
+**Base Server Operational Permissions:**
+`--allow-env=DENO_EXEC_PATH` (to find Deno executable)
+`--allow-run` (to run scripts in a subprocess)
+`--allow-write` (to create temporary script files)
+`--allow-read` (to read temporary script files)
 
-### With specific permissions:
+### Basic (Server Operational Permissions Only):
+This configuration allows the server to run and execute scripts, but the scripts themselves will have a very restricted environment unless more permissions are added.
 ```json
 {
   "mcpServers": {
@@ -59,9 +54,10 @@ For Claude Desktop configuration:
       "command": "deno",
       "args": [
         "run",
-        "--allow-net=example.com",
-        "--allow-read=/tmp",
-        "--allow-write=/tmp",
+        "--allow-env=DENO_EXEC_PATH",
+        "--allow-run",
+        "--allow-write",
+        "--allow-read",
         "jsr:@cong/mcp-deno"
       ]
     }
@@ -69,13 +65,43 @@ For Claude Desktop configuration:
 }
 ```
 
-### Full permissions (use with caution):
+### With Additional Script Permissions:
+This example adds `--allow-net` for scripts that need network access and more specific read/write access.
 ```json
 {
   "mcpServers": {
     "deno-executor": {
       "command": "deno",
-      "args": ["run", "--allow-all", "jsr:@cong/mcp-deno"]
+      "args": [
+        "run",
+        // Base server operational permissions:
+        "--allow-env=DENO_EXEC_PATH",
+        "--allow-run",
+        "--allow-write",
+        "--allow-read",
+        // Additional permissions for scripts:
+        "--allow-net=example.com", // Allow specific network access
+        "--allow-read=/data",      // Allow reading from /data
+        "--allow-write=/output",   // Allow writing to /output
+        "jsr:@cong/mcp-deno"
+      ]
+    }
+  }
+}
+```
+
+### Full Permissions (use with caution):
+This grants all permissions to the server and subsequently to the scripts it executes. This should be used sparingly and only in trusted environments.
+```json
+{
+  "mcpServers": {
+    "deno-executor": {
+      "command": "deno",
+      "args": [
+        "run",
+        "--allow-all", // Includes all necessary operational and script permissions
+        "jsr:@cong/mcp-deno"
+      ]
     }
   }
 }

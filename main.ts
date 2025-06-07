@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-all
+#!/usr/bin/env -S deno run
 
 /// <reference types="npm:@types/node@^22.12.0" />
 
@@ -23,7 +23,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "execute_typescript",
-        description: "Execute TypeScript or JavaScript code using Deno. Permissions are configured at server startup.",
+        description: "Execute TypeScript or JavaScript code using Deno. The Deno process must be started with the necessary permissions for the code you intend to run (e.g., --allow-net, --allow-read, --allow-write).",
         inputSchema: {
           type: "object",
           properties: {
@@ -45,86 +45,108 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       code: string;
     };
 
-    try {
-      // Create a temporary directory for script isolation
-      const tempDir = await Deno.makeTempDir({ prefix: "deno-mcp-" });
-      const scriptPath = `${tempDir}/script.ts`;
-      
-      try {
-        // Write the code to a temporary file
-        await Deno.writeTextFile(scriptPath, code, { mode: 0o600 });
+    // Input validation for 'code'
+    if (typeof code !== 'string') {
+      return {
+        content: [{ type: "text", text: "Error: 'code' argument must be a string." }],
+        isError: true,
+      };
+    }
 
-        // Execute the script using the current Deno executable
-        const command = new Deno.Command(Deno.execPath(), {
-          args: ["run", "--no-check", scriptPath],
-          stdout: "piped",
-          stderr: "piped",
-          cwd: tempDir,
-        });
+    return await executeDenoScript(code);
+  }
 
-        const { code: exitCode, stdout, stderr } = await command.output();
-        const stdoutText = new TextDecoder().decode(stdout);
-        const stderrText = new TextDecoder().decode(stderr);
+  // Handle unknown tools
+  return {
+    content: [
+      {
+        type: "text",
+        text: `Error: Unknown tool '${request.params.name}'. Available tools: 'execute_typescript'.`,
+      },
+    ],
+    isError: true,
+  };
+});
 
-        if (exitCode === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: stdoutText || "Code executed successfully (no output)",
-              },
-            ],
-          };
-        } else {
-          // Check if it's a permission error and provide helpful feedback
-          if (stderrText.includes("PermissionDenied") || stderrText.includes("permission denied")) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `Permission denied error:\n${stderrText}\n\nTo grant permissions, restart the MCP server with appropriate flags like --allow-net, --allow-read, or --allow-write`,
-                },
-              ],
-              isError: true,
-            };
-          }
-          
-          return {
-            content: [
-              {
-                type: "text", 
-                text: `Error (exit code ${exitCode}):\n${stderrText}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      } finally {
-        // Clean up the temporary directory
-        await Deno.remove(tempDir, { recursive: true }).catch(() => {
-          // Ignore cleanup errors
-        });
-      }
-    } catch (error) {
+async function executeDenoScript(code: string) {
+  let tempDir: string | undefined;
+  try {
+    // Create a temporary directory for script isolation
+    tempDir = await Deno.makeTempDir({ prefix: "deno-mcp-" });
+    const scriptPath = `${tempDir}/script.ts`;
+
+    // Write the code to a temporary file
+    await Deno.writeTextFile(scriptPath, code, { mode: 0o600 });
+
+    // Execute the script using the current Deno executable
+    const command = new Deno.Command(Deno.execPath(), {
+      args: ["run", "--no-check", scriptPath],
+      stdout: "piped",
+      stderr: "piped",
+      cwd: tempDir,
+    });
+
+    const { code: exitCode, stdout, stderr } = await command.output();
+    const stdoutText = new TextDecoder().decode(stdout);
+    const stderrText = new TextDecoder().decode(stderr);
+
+    if (exitCode === 0) {
       return {
         content: [
           {
             type: "text",
-            text: `Execution error: ${(error as Error).message}`,
+            text: stdoutText || "Code executed successfully (no output)",
+          },
+        ],
+      };
+    } else {
+      // Check if it's a permission error and provide helpful feedback
+      if (stderrText.includes("PermissionDenied") || stderrText.includes("permission denied")) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Permission denied error:\n${stderrText}\n\nTo grant permissions, restart the MCP server with appropriate flags like --allow-net, --allow-read, or --allow-write`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error (exit code ${exitCode}):\n${stderrText}`,
           },
         ],
         isError: true,
       };
     }
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Execution error: ${(error as Error).message}`,
+        },
+      ],
+      isError: true,
+    };
+  } finally {
+    if (tempDir) {
+      // Clean up the temporary directory
+      await Deno.remove(tempDir, { recursive: true }).catch((err) => {
+        console.error(`Failed to clean up temporary directory ${tempDir}:`, err);
+      });
+    }
   }
-
-  throw new Error(`Unknown tool: ${request.params.name}`);
-});
+}
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("MCP Deno server running on stdio");
+  console.log("MCP Deno server running on stdio");
 }
 
 if (import.meta.main) {

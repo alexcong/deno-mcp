@@ -56,7 +56,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Execute the script using the current Deno executable
         const command = new Deno.Command(Deno.execPath(), {
-          args: ["run", "--no-check", scriptPath],
+          args: ["run", "--no-check","--allow-all", scriptPath],
           stdout: "piped",
           stderr: "piped",
           cwd: tempDir,

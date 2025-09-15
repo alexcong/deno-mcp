@@ -11,7 +11,7 @@ import {
 
 const server = new Server({
   name: "mcp-deno",
-  version: "0.1.1",
+  version: "0.2.1",
 }, {
   capabilities: {
     tools: {},
